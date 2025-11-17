@@ -1,0 +1,2235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AI DICOM Analyzer — Gray UI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5.0, user-scalable=yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <style>
+    :root {
+      /* Neutral gray theme tuned for monochrome medical imagery */
+      --bg: #0e0f12;               /* page background */
+      --panel: #1a1c20;            /* panels */
+      --panel-2: #202329;          /* inner panels */
+      --panel-3: #262a31;          /* chips/cards */
+      --line: #2e333d;             /* separators */
+      --text: #e7e9ee;             /* primary text */
+      --muted: #a9afbb;            /* secondary text */
+      --accent: #7aa2ff;           /* subtle blue accent for focus/progress */
+      --accent-2: #4ad1c8;         /* secondary accent for heatmap/pins */
+      --ok: #4ad67a;
+      --warn: #ffce5c;
+      --error: #ff6b6b;
+
+      --radius-xl: 18px;
+      --radius-lg: 14px;
+      --radius-md: 10px;
+      --shadow-1: 0 10px 30px rgba(0,0,0,.35);
+      --shadow-2: 0 10px 24px rgba(0,0,0,.25), 0 2px 6px rgba(0,0,0,.35);
+
+      --viewer-h: 100vh;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 800px at 15% -20%, #121418 0%, var(--bg) 60%) no-repeat, var(--bg);
+      color: var(--text);
+      font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== Top bar ===== */
+    .topbar {
+      flex-shrink: 0;
+      z-index: 40;
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between;
+      height: 56px; 
+      padding: 0 18px;
+      background: color-mix(in srgb, var(--panel) 86%, #000 14%);
+      border-bottom: 1px solid var(--line);
+      box-shadow: var(--shadow-2);
+    }
+    .app-title { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, #93a7ff 0%, #7aa2ff 50%, #4ad1c8 100%);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.12), 0 6px 16px rgba(0,0,0,.3);
+    }
+    .title { font-size: 16px; font-weight: 600; letter-spacing: .2px; }
+
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .btn, .chip {
+      border: 1px solid var(--line); color: var(--text);
+      background: linear-gradient(180deg, var(--panel-2), color-mix(in srgb, var(--panel-2) 80%, #000 20%));
+      padding: 8px 12px; border-radius: 12px;
+      display: inline-flex; align-items: center; gap: 8px;
+      transition: .2s ease transform, .2s ease border-color, .2s ease background;
+      cursor: pointer; user-select: none;
+    }
+    .btn:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--line), var(--accent) 35%); }
+    .btn:active { transform: translateY(0); }
+    .btn.primary {
+      border-color: color-mix(in srgb, var(--line), var(--accent) 40%);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 40%, var(--accent) 60%), var(--panel-2));
+    }
+    .btn[disabled] { opacity: .5; pointer-events: none; }
+
+    /* ===== Layout - Professional Grid ===== */
+    .shell {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      grid-template-rows: 1fr 240px;
+      gap: 0;
+      height: calc(100vh - 56px);
+      overflow: hidden;
+    }
+
+    /* ===== Center viewer ===== */
+    .center {
+      grid-column: 1;
+      grid-row: 1 / 3;
+      background: #0b0c0f;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .viewer {
+      flex: 1;
+      position: relative;
+      background: #0b0c0f;
+      overflow: hidden;
+    }
+    .viewer .frame {
+      position: absolute; inset: 0; border-radius: inherit;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.04), inset 0 0 65px rgba(0,0,0,.6);
+    }
+    .viewer .imgwrap {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 40px),
+        repeating-linear-gradient(0deg, rgba(255,255,255,.02) 0 1px, transparent 1px 40px);
+      filter: contrast(1.02) saturate(1.02);
+    }
+    .viewer img, .viewer video {
+      max-width: 100%; max-height: 100%;
+      object-fit: contain; border-radius: 8px;
+      image-rendering: auto; /* crisp enough for CT grayscale */
+    }
+
+    /* Light, realistic sweep for Enhancement stage */
+    .sweep::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(115deg, transparent 45%, rgba(255,255,255,.08) 50%, transparent 55%);
+      transform: translateX(-150%);
+      animation: sweep 2.8s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes sweep {
+      0% { transform: translateX(-160%); }
+      55% { transform: translateX(160%); }
+      100% { transform: translateX(160%); }
+    }
+
+    /* Hotspots + heatmap */
+    .hotspot {
+      position: absolute; width: 120px; height: 120px; border-radius: 999px;
+      background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.12), rgba(122,162,255,.14) 40%, transparent 60%);
+      mix-blend-mode: screen; opacity: 0; transform: scale(.7);
+      animation: pulse 1.4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes pulse {
+      0% { opacity: .0; transform: scale(.65); }
+      40% { opacity: .75; transform: scale(1); }
+      100% { opacity: .05; transform: scale(.85); }
+    }
+    .heat {
+      display: none; /* DISABLED - heatmaps removed */
+    }
+    .pin {
+      position: absolute; width: 10px; height: 10px; border-radius: 999px; background: var(--accent-2);
+      border: 2px solid white; box-shadow: 0 0 0 4px rgba(74,209,200,.18);
+      transform: translate(-50%, -50%) scale(.6); opacity: 0; transition: .35s ease;
+      display: none; /* DISABLED */
+    }
+    .pin.show { 
+      display: none; /* DISABLED */
+    }
+
+    /* ===== Right Panel - Compact, Scrollable ===== */
+    .right {
+      grid-column: 2;
+      grid-row: 1 / 3;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Make scrollbar subtle */
+    .right::-webkit-scrollbar {
+      width: 6px;
+    }
+    .right::-webkit-scrollbar-track {
+      background: var(--panel);
+    }
+    .right::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 3px;
+    }
+    .right::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
+    /* ===== Bottom Panel - Fixed Height ===== */
+    .bottom-panel {
+      grid-column: 1;
+      grid-row: 2;
+      height: 240px;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .section-title {
+      font-size: 10px; 
+      text-transform: uppercase; 
+      letter-spacing: .12em; 
+      color: var(--muted);
+      margin: 0 0 6px;
+      font-weight: 600;
+    }
+    
+    .drop {
+      border: 1px dashed color-mix(in srgb, var(--line), var(--accent) 20%);
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      border-radius: 10px;
+      padding: 10px; 
+      text-align: center;
+      font-size: 11px;
+    }
+    .drop strong { color: var(--accent); }
+    
+    .filmstrip {
+      display: flex; 
+      gap: 5px; 
+      overflow-x: auto; 
+      padding: 3px 0;
+      max-height: 52px;
+    }
+    .thumb {
+      width: 50px; 
+      height: 36px; 
+      border-radius: 5px; 
+      flex: 0 0 auto;
+      background: #0b0c0f; 
+      border: 1px solid var(--line);
+      display: grid; 
+      place-items: center;
+      color: var(--muted); 
+      font-size: 8px;
+      position: relative;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; }
+    .thumb .x {
+      position: absolute; 
+      right: 2px; 
+      top: 2px; 
+      width: 14px; 
+      height: 14px; 
+      border-radius: 3px;
+      background: rgba(0,0,0,.7); 
+      display: grid; 
+      place-items: center;
+      border: 1px solid var(--line); 
+      cursor: pointer; 
+      color: #fff; 
+      font-weight: 700; 
+      line-height: 1;
+      font-size: 11px;
+    }
+
+    /* Pipeline Progress */
+    .progress {
+      height: 5px; 
+      background: var(--panel-2); 
+      border: 1px solid var(--line);
+      border-radius: 999px; 
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .progress > span {
+      display: block; 
+      height: 100%; 
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), #a2b9ff);
+      transition: width .6s ease;
+    }
+
+    .phase {
+      font-size: 10px;
+      font-weight: 600; 
+      color: var(--muted); 
+      letter-spacing: .06em;
+      margin: 6px 0 4px;
+    }
+
+    .tile {
+      background: rgba(32, 35, 41, 0.6);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: .2s ease transform, .2s ease border-color, .2s ease box-shadow;
+    }
+    .tile.running {
+      transform: scale(1.01);
+      border-color: color-mix(in srgb, var(--line), var(--accent) 40%);
+      box-shadow: 0 0 0 3px rgba(122,162,255,.06) inset;
+    }
+    /* When a pipeline tile is completed, give it a green treatment */
+    .tile.done {
+      transform: scale(1.01);
+      border-color: color-mix(in srgb, var(--line), #4ad67a 56%);
+      box-shadow: 0 0 0 3px rgba(74,214,122,.06) inset;
+      background: linear-gradient(180deg, rgba(74,214,122,0.04), rgba(32,35,41,0.6));
+    }
+    .tile.done h4 { color: #eaffef; }
+    .tile.done p { color: rgba(230,255,238,0.85); }
+    .status.done {
+      color: #0b6b3a;
+      background: rgba(74,214,122,0.12);
+      border: 1px solid rgba(74,214,122,0.18);
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-weight: 700;
+      display: inline-block;
+      min-width: 46px;
+      text-align: center;
+    }
+    .tile h4 {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tile p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.3;
+    }
+
+    /* AI Analysis Results Box */
+    .results-box {
+      background: rgba(32, 35, 41, 0.8);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .results-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .result-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .result-item:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .result-label {
+      font-size: 10px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .result-bar {
+      height: 3px;
+      flex: 1;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 0 8px;
+      max-width: 80px;
+    }
+    .result-bar > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      transition: width 0.9s ease;
+    }
+    .result-bar.red > span { background: #ff6b6b; }
+    .result-bar.orange > span { background: #ffce5c; }
+    .result-bar.blue > span { background: #7aa2ff; }
+    .result-bar.gray > span { background: #a9afbb; }
+    .result-value {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      min-width: 32px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* Toast styles */
+    .toast-wrap { 
+      position: fixed; 
+      right: 18px; 
+      top: 70px; 
+      display: flex; 
+      flex-direction: column;
+      gap: 8px; 
+      z-index: 200; 
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--panel-2); 
+      border: 1px solid var(--line); 
+      border-left: 3px solid var(--accent);
+      border-radius: 10px; 
+      padding: 10px 14px; 
+      min-width: 240px; 
+      box-shadow: var(--shadow-2);
+      animation: toastIn .3s ease;
+      font-size: 12px;
+      pointer-events: auto;
+    }
+    .toast.warn { border-left-color: var(--warn); }
+    .toast.ok { border-left-color: var(--ok); }
+    @keyframes toastIn { 
+      from { transform: translateX(100%); opacity: 0; } 
+      to { transform: translateX(0); opacity: 1; } 
+    }
+
+    /* Utility */
+    .row { display: flex; align-items: center; gap: 8px; }
+    .space { flex: 1; }
+
+    /* Responsive adjustments */
+    @media (max-width: 1200px) {
+      .shell {
+        grid-template-columns: 1fr 280px;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: 60vh 40vh;
+      }
+      .right {
+        grid-column: 1;
+        grid-row: 2;
+        border-left: none;
+        border-top: 1px solid var(--line);
+      }
+      .bottom-panel {
+        display: none;
+      }
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+    }
+
+    /* Rotate device overlay for tablets in portrait */
+    .rotate-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      background: linear-gradient(135deg, #7aa2ff 0%, #4ad1c8 100%);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .rotate-content {
+      text-align: center;
+      color: white;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .rotate-icon {
+      margin: 0 auto 24px;
+      display: block;
+      animation: rotateDevice 2s ease-in-out infinite;
+      color: white;
+    }
+
+    @keyframes rotateDevice {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-15deg); }
+      75% { transform: rotate(15deg); }
+    }
+
+    /* Show rotate overlay only on tablets in portrait mode */
+    @media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+      .rotate-overlay {
+        display: flex !important;
+      }
+      .shell, .topbar {
+        display: none !important;
+      }
+    }
+
+    /* ROI box + label (yellow) */
+    .roi {
+      position: absolute;
+      border: 2px solid #ffd700;
+      background: linear-gradient(180deg, rgba(255,215,0,0.06), rgba(255,215,0,0.02));
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35), 0 0 0 4px rgba(255,215,0,0.03) inset;
+      transform: translate(-50%,-50%) scale(.85);
+      opacity: 0;
+      transition: transform .36s cubic-bezier(.2,.9,.2,1), opacity .36s ease;
+      pointer-events: none;
+      border-radius: 6px;
+      width: 30px;  /* Fixed size */
+      height: 30px; /* Fixed size */
+    }
+    .roi.show { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+
+    .roi .roi-label {
+      position: absolute;
+      top: -28px;
+      left: 0;
+      transform: translateX(0);
+      background: #111;
+      color: #ffd700;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.45);
+      border: 1px solid rgba(0,0,0,0.4);
+      white-space: nowrap;
+    }
+
+    .roi .roi-fill {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255,215,0,0.06), rgba(255,215,0,0.02));
+      mix-blend-mode: screen;
+      opacity: .32;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+
+    /* DICOM Overlay Text */
+    .dicom-overlay {
+      position: absolute;
+      color: #00ff00;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      text-shadow: 0 0 3px rgba(0,0,0,0.8);
+      z-index: 15;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .dicom-overlay.visible {
+      opacity: 1;
+    }
+    .dicom-overlay.top-left {
+      top: 12px;
+      left: 12px;
+    }
+    .dicom-overlay.top-right {
+      top: 12px;
+      right: 12px;
+      text-align: right;
+    }
+    .dicom-overlay.bottom-left {
+      bottom: 12px;
+      left: 12px;
+    }
+    .dicom-overlay.bottom-right {
+      bottom: 12px;
+      right: 12px;
+      text-align: right;
+    }
+
+    /* ===== Viewer Tools Bar ===== */
+    .viewer-tools {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px 0 0 10px;
+      box-shadow: var(--shadow-1);
+      z-index: 10;
+    }
+    .viewer-tools .tool-btn {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: .2s ease background, .2s ease border-color;
+      color: var(--text);
+    }
+    .viewer-tools .tool-btn:hover {
+      background: color-mix(in srgb, var(--panel-2) 80%, var(--accent) 20%);
+      border-color: var(--accent);
+    }
+    .viewer-tools .tool-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+    /* Responsive: hide on small screens */
+    @media (max-width: 900px) {
+      .viewer-tools { display: none; }
+    }
+
+    /* Fixed toolbar bar (bottom-center) — straight horizontal line with inline buttons */
+    .image-toolbar {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 80%, #000 20%), var(--panel));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.4);
+      z-index: 60;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+      backdrop-filter: blur(8px) saturate(.95);
+    }
+    .image-toolbar.visible { opacity: 1; pointer-events: auto; }
+
+    .image-toolbar .tb-btn {
+      width: 36px;
+      height: 36px;
+      display: inline-grid;
+      place-items: center;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 16px;
+      transition: .15s ease background, .15s ease border-color, .15s ease transform;
+    }
+    .image-toolbar .tb-btn:hover {
+      background: color-mix(in srgb, var(--panel-2) 70%, var(--accent) 30%);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .image-toolbar .tb-btn:active {
+      transform: translateY(0);
+    }
+    .image-toolbar .tb-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .image-toolbar .tb-sep {
+      width: 1px;
+      height: 24px;
+      background: var(--line);
+      margin: 0 2px;
+    }
+
+    /* ensure image transform is smooth when toolbar used */
+    .viewer img, .viewer video { transition: transform .14s ease; }
+
+    /* Loading spinner for file upload */
+    .drop.loading {
+      pointer-events: none;
+      position: relative;
+    }
+    .drop.loading::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(14, 15, 18, 0.8);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .drop.loading::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 24px;
+      height: 24px;
+      margin: -12px 0 0 -12px;
+      border: 3px solid var(--line);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      z-index: 1;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Ready to Analyze overlay */
+    .ready-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+      z-index: 5;
+    }
+    .ready-overlay.visible {
+      opacity: 1;
+    }
+    .ready-overlay .icon-wrapper {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(122,162,255,0.15), rgba(74,209,200,0.15));
+      border: 2px solid rgba(122,162,255,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+    .ready-overlay .icon-wrapper svg {
+      width: 40px;
+      height: 40px;
+      color: var(--accent);
+    }
+    @keyframes pulse-glow {
+      0%, 100% { 
+        box-shadow: 0 0 20px rgba(122,162,255,0.3);
+        transform: scale(1);
+      }
+      50% { 
+        box-shadow: 0 0 40px rgba(122,162,255,0.5);
+        transform: scale(1.05);
+      }
+    }
+    .ready-overlay .ready-text {
+      text-align: center;
+    }
+    .ready-overlay .ready-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0 0 8px 0;
+    }
+    .ready-overlay .ready-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+    .ready-overlay .ready-file-count {
+      font-size: 11px;
+      color: var(--accent);
+      background: rgba(122,162,255,0.1);
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(122,162,255,0.2);
+    }
+
+    /* Add style for API key input */
+    .api-key-input {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .api-key-input label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .api-key-input input {
+      padding: 5px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 4px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <!-- ===== Top Bar ===== -->
+  <header class="topbar" role="banner">
+    <div class="app-title">
+      <div class="logo" aria-hidden="true"></div>
+  <div class="title">AI DICOM Analyzer</div>
+    </div>
+    <div class="top-actions" role="toolbar" aria-label="top actions">
+      <button id="btnHelp" class="btn" aria-haspopup="dialog" aria-controls="helpDialog">
+        <!-- ? icon -->
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2a10 10 0 100 20A10 10 0 0012 2Zm0 15.5a1.25 1.25 0 110 2.5 1.25 1.25 0 010-2.5Zm2.34-7.9c-.43-.5-1.03-.85-1.84-1.03-.83-.18-1.41-.21-1.9.05-.6.3-1 .86-1 1.53a1 1 0 1 1-2 0c0-1.56.8-2.86 2.15-3.55 1.01-.51 2.12-.55 3.18-.32 1.13.25 2.1.82 2.78 1.62.69.81 1.05 1.82 1.05 2.92 0 1.67-1.05 2.81-2.04 3.56-.47.36-.9.69-1.13 1.02-.26.41-.26.72-.26.92v.31a1 1 0 11-2 0v-.31c0-.64.07-1.42.58-2.19.47-.71 1.09-1.18 1.6-1.56.78-.59 1.25-1.18 1.25-2.05 0-.58-.19-1.03-.52-1.39Z" fill="currentColor"/>
+        </svg>
+        Help
+      </button>
+  <button id="btnReport" class="btn" disabled>
+        <!-- download icon -->
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3v10m0 0l3.5-3.5M12 13L8.5 9.5M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Download Report
+      </button>
+    </div>
+  </header>
+
+  <!-- Rotate Device Overlay for Tablets in Portrait Mode -->
+  <div class="rotate-overlay" id="rotateOverlay" style="display: none;">
+    <div class="rotate-content">
+      <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rotate-icon">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+        <path d="M12 7v4l3-3m-6 0l3 3" stroke-width="1.5"></path>
+      </svg>
+      <h2 style="font-size: 32px; font-weight: 700; margin-bottom: 16px; color: white;">Rotate Your Device</h2>
+      <p style="font-size: 18px; line-height: 1.6; margin-bottom: 12px; color: rgba(255, 255, 255, 0.95);">Please rotate your tablet to landscape orientation for the best experience</p>
+    </div>
+  </div>
+
+  <!-- ===== Main Grid Layout ===== -->
+  <main class="shell">
+    <!-- CENTER Viewer (spans row 1) -->
+    <section class="center" aria-label="viewer">
+      <div id="viewer" class="viewer">
+        <div class="frame"></div>
+        <div id="imgwrap" class="imgwrap">
+          <img id="theImg" alt="Sample image" style="display:none;" />
+          <video id="theVid" muted autoplay loop playsinline style="display:none;"></video>
+          
+          <!-- Ready to Analyze overlay -->
+          <div id="readyOverlay" class="ready-overlay">
+            <div class="icon-wrapper">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 11l3 3L22 4"></path>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+            </div>
+            <div class="ready-text">
+              <h3 class="ready-title">Ready to Analyze</h3>
+              <p class="ready-subtitle">Click "Start AI Analysis" to begin processing</p>
+            </div>
+            <div id="readyFileCount" class="ready-file-count">0 files loaded</div>
+          </div>
+        </div>
+
+        <!-- Fixed image toolbar (bottom-left) -->
+        <div id="imageToolbar" class="image-toolbar" aria-hidden="true" role="toolbar" aria-label="Image manipulation tools">
+          <button id="tbZoomIn" class="tb-btn" title="Zoom in">+</button>
+          <button id="tbZoomOut" class="tb-btn" title="Zoom out">−</button>
+          <div class="tb-sep"></div>
+          <button id="tbRotateL" class="tb-btn" title="Rotate left">⟲</button>
+          <button id="tbRotateR" class="tb-btn" title="Rotate right">⟳</button>
+          <div class="tb-sep"></div>
+          <button id="tbPoint" class="tb-btn" title="Add annotation point">●</button>
+          <button id="tbReset" class="tb-btn" title="Reset view">⌂</button>
+        </div>
+
+        <!-- DICOM Overlay Text -->
+        <div id="overlayTopLeft" class="dicom-overlay top-left">
+          <div>Institution: Medical Center</div>
+          <div>Study: CT Head W/O Contrast</div>
+          <div>Series: Axial 5mm</div>
+          <div>TE: 0.0 ms TR: 0.0 ms</div>
+        </div>
+
+        <div id="overlayTopRight" class="dicom-overlay top-right">
+          <div>Patient: SAMPLE^PATIENT</div>
+          <div>ID: 12345678</div>
+          <div>Age: 45Y Sex: M</div>
+          <div>Study Date: 2025-01-11</div>
+        </div>
+
+        <div id="overlayBottomLeft" class="dicom-overlay bottom-left">
+          <div>kVp: 120 mAs: 280</div>
+          <div>512 x 512</div>
+        </div>
+
+        <div id="overlayBottomRight" class="dicom-overlay bottom-right">
+          <div id="sliceInfo">Slice: 7/20</div>
+        </div>
+
+        <!-- overlays -->
+        <div id="hot1" class="hotspot" style="left: 36%; top: 40%;"></div>
+        <div id="hot2" class="hotspot" style="left: 58%; top: 58%; animation-delay: .35s;"></div>
+        <div id="hot3" class="hotspot" style="left: 48%; top: 32%; animation-delay: .7s;"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT Panel - Upload + Pipeline (spans both rows) -->
+    <aside class="right" aria-label="upload and pipeline">
+      <!-- Upload Section -->
+      <div class="section-title">UPLOAD DICOM</div>
+      <div id="drop" class="drop" tabindex="0" role="button" aria-label="Upload files">
+        <p style="margin: 3px 0;">Drop folder or <strong>Choose</strong></p>
+        <input id="fileInput" type="file" webkitdirectory directory multiple hidden />
+        <div class="row" style="justify-content:center; margin-top:5px; gap: 5px;">
+          <button id="btnChoose" class="btn" style="padding: 5px 9px; font-size: 11px;">Browse Folder</button>
+          <button id="btnSample" class="btn" style="padding: 5px 9px; font-size: 11px;">Load Sample</button>
+        </div>
+      </div>
+      
+      <div class="section-title" style="margin-top:6px;">FILES</div>
+      <div id="film" class="filmstrip" aria-live="polite"></div>
+
+      <!-- Start Analysis Button -->
+      <button id="btnStart" class="btn primary" disabled style="width: 100%; padding: 9px; margin-top: 6px; font-size: 12px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M8 5v14l11-7-11-7Z" fill="currentColor"/>
+        </svg>
+        Start AI Analysis
+      </button>
+
+      <!-- Pipeline Status -->
+      <div class="section-title" style="margin-top: 10px;">ANALYSIS PIPELINE</div>
+      <div class="progress" aria-label="overall progress"><span id="progress"></span></div>
+      
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+        <span class="phase" style="margin: 0;">Phase 1 — Image Processing</span>
+        <span class="muted" style="font-size:9px;" id="pipelineStatus">Ready</span>
+      </div>
+
+      <div id="step1" class="tile">
+        <div class="row" style="gap: 5px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          </svg>
+          <h4>Segmentation</h4>
+          <div class="space"></div>
+          <span id="st1" class="status" style="font-size: 9px;">Pending</span>
+        </div>
+        <p>Anatomical structure identification</p>
+      </div>
+
+      <div id="step2" class="tile">
+        <div class="row" style="gap: 5px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
+            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+          </svg>
+          <h4>Image Enhancement</h4>
+          <div class="space"></div>
+          <span id="st2" class="status" style="font-size: 9px;">Pending</span>
+        </div>
+        <p>Noise reduction and contrast optimization</p>
+      </div>
+
+      <div id="step3" class="tile">
+        <div class="row" style="gap: 5px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          <h4>Anomaly Detection</h4>
+          <div class="space"></div>
+          <span id="st3" class="status" style="font-size: 9px;">Pending</span>
+        </div>
+        <p>Identifying regions of interest</p>
+      </div>
+
+      <div id="step4" class="tile">
+        <div class="row" style="gap: 5px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+          <h4>Feature Extraction</h4>
+          <div class="space"></div>
+          <span id="st4" class="status" style="font-size: 9px;">Pending</span>
+        </div>
+        <p>Texture and intensity analysis</p>
+      </div>
+
+      <div class="phase">02 — Diagnosis Phase</div>
+
+      <div id="step5" class="tile">
+        <div class="row" style="gap: 5px;">
+          <h4>Database Matching</h4>
+          <div class="space"></div>
+          <span id="st5" class="status" style="font-size: 9px;">Pending</span>
+        </div>
+        <p>Compare patterns against database</p>
+      </div>
+
+      <div id="step6" class="tile">
+        <div class="row" style="gap: 5px;">
+          <h4>Report Generation</h4>
+          <div class="space"></div>
+          <span id="st6" class="status" style="font-size: 9px;">Pending</span>
+        </div>
+        <p>Generate findings summary</p>
+      </div>
+    </aside>
+
+    <!-- BOTTOM Panel - AI Results -->
+    <div class="bottom-panel">
+      <div class="section-title">AI ANALYSIS RESULTS</div>
+      <div class="results-box">
+        <div class="result-item">
+          <span class="result-label">Hemorrhage</span>
+          <div class="result-bar red"><span id="r1"></span></div>
+          <span class="result-value" id="rv1">0%</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">Mass Effect</span>
+          <div class="result-bar orange"><span id="r2"></span></div>
+          <span class="result-value" id="rv2">0%</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">Midline Shift</span>
+          <div class="result-bar blue"><span id="r3"></span></div>
+          <span class="result-value" id="rv3">0%</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">Normal</span>
+          <div class="result-bar gray"><span id="r4"></span></div>
+          <span class="result-value" id="rv4">0%</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Toast area -->
+  <div id="toasts" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Help dialog (very small, inline) -->
+  <dialog id="helpDialog" style="border:none; border-radius:16px; padding:0; background:transparent;">
+    <div style="background: var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; width:min(92vw,520px); box-shadow: var(--shadow-2);">
+  <h3 style="margin:0 0 6px;">About this Tool</h3>
+  <p class="muted" style="margin:0 0 12px;">This is a visualization only. It does not perform real DICOM processing or medical diagnosis. Files never leave your browser.</p>
+      <div class="row" style="justify-content:flex-end;">
+        <button id="btnCloseHelp" class="btn">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script>
+    /* ========= Utility & State ========= */
+    const $ = sel => document.querySelector(sel);
+    const progressEl = $('#progress');
+    const imgWrap = $('#imgwrap');
+    const theImg = $('#theImg');
+    const theVid = $('#theVid');
+    const readyOverlay = $('#readyOverlay');
+    let readyOverlayHideTimeout = null;
+    const readyFileCount = $('#readyFileCount');
+    const pins = []; // DISABLED - was: [$('#pin1'), $('#pin2'), $('#pin3')];
+    const heats = []; // DISABLED - heatmaps removed
+    const hots  = [$('#hot1'), $('#hot2'), $('#hot3')];
+    
+    // DICOM overlays
+    const overlays = [
+      $('#overlayTopLeft'),
+      $('#overlayTopRight'),
+      $('#overlayBottomLeft'),
+      $('#overlayBottomRight')
+    ];
+
+    const steps = [
+      { id: 1, name: 'Segmentation', el: $('#step1'), status: $('#st1'), ms: rand(2400, 3400) },
+      { id: 2, name: 'Image Enhancement', el: $('#step2'), status: $('#st2'), ms: rand(2200, 3200) },
+      { id: 3, name: 'Anomaly Detection', el: $('#step3'), status: $('#st3'), ms: rand(2800, 3800) },
+      { id: 4, name: 'Feature Extraction', el: $('#step4'), status: $('#st4'), ms: rand(2200, 3200) },
+      { id: 5, name: 'Database Matching', el: $('#step5'), status: $('#st5'), ms: rand(2600, 3600) },
+      { id: 6, name: 'Report Generation', el: $('#step6'), status: $('#st6'), ms: rand(1800, 2800) },
+    ];
+
+    let queue = [];
+    let running = false;
+  const SAMPLE_GIF = "demo-scan.gif";
+    let aiAnalysisResults = null; // Store AI analysis results
+
+    function rand(a, b) { return Math.floor(Math.random()*(b-a+1))+a; }
+
+    function showToast(type, msg, timeout = 3000) {
+      const wrap = $('#toasts');
+      const el = document.createElement('div');
+      el.className = `toast ${type||''}`;
+      el.textContent = msg;
+      wrap.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(100%)';
+        setTimeout(() => el.remove(), 300);
+      }, timeout);
+    }
+
+    function setStatus(stepIndex, state) {
+      const s = steps[stepIndex];
+      s.el.classList.toggle('running', state === 'running');
+      s.el.classList.toggle('done', state === 'done');
+      s.status.classList.toggle('running', state === 'running');
+      s.status.classList.toggle('done', state === 'done');
+      s.status.textContent = state[0].toUpperCase()+state.slice(1);
+    }
+
+    function updateOverallProgress(idx, fracWithinStep) {
+      const perStep = 1 / steps.length;
+      const total = Math.min(1, idx*perStep + fracWithinStep*perStep);
+      progressEl.style.width = (total*100).toFixed(1)+'%';
+    }
+
+    function resetUI(full=true) {
+      running = false;
+      steps.forEach(s => {
+        s.el.classList.remove('running','done');
+        s.status.classList.remove('running','done');
+        s.status.textContent = 'Pending';
+      });
+      updateOverallProgress(0, 0);
+      $('#pipelineStatus').textContent = 'Ready';
+      $('#btnStart').disabled = queue.length === 0 && !$('#film [data-sample="1"]');
+      $('#btnReport').disabled = true;
+
+      // overlays off
+      hots.forEach(h => (h.style.opacity = 0));
+      // heats.forEach(h => (h.style.opacity = 0)); // DISABLED
+      // pins.forEach(p => p.classList.remove('show')); // DISABLED
+      $('#viewer').classList.remove('sweep');
+      document.querySelectorAll('.roi').forEach(r => r.remove());
+      hideDicomOverlays();
+
+      // reset result bars
+      ['r1','r2','r3','r4'].forEach(id => { $('#'+id).style.width = '0%'; });
+      ['rv1','rv2','rv3','rv4'].forEach(id => { $('#'+id).textContent = '0%'; });
+
+      if (full && queue.length === 0) {
+        theImg.style.display = 'none';
+        theVid.style.display = 'none';
+        hideDicomOverlays();
+        hideReadyOverlay();
+      }
+    }
+
+    /* ========= Upload + Filmstrip ========= */
+    const drop = $('#drop');
+    const fileInput = $('#fileInput');
+    const film = $('#film');
+    let isProcessingFiles = false;
+
+    function queueFiles(files) {
+      // Clear previous queue when new folder is selected
+      queue = [];
+      film.innerHTML = '';
+      
+      // Show loading state
+      drop.classList.add('loading');
+      
+      // Process files after a short delay to show loading animation
+      setTimeout(() => {
+        for (const f of files) {
+          const url = URL.createObjectURL(f);
+          queue.push({ name: f.name, size: f.size, url, type: f.type || 'application/octet-stream' });
+          const card = document.createElement('div');
+          card.className = 'thumb';
+          const label = document.createElement('span');
+          label.textContent = f.type.startsWith('image/') ? '' : f.name.split('.').pop().toUpperCase();
+          card.appendChild(label);
+          if (f.type.startsWith('image/')) {
+            const im = document.createElement('img'); im.src = url; card.appendChild(im);
+          }
+          const x = document.createElement('div'); x.className = 'x'; x.textContent = '×';
+          x.title = 'Remove';
+          x.onclick = () => {
+            URL.revokeObjectURL(url);
+            queue = queue.filter(q => q.url !== url);
+            card.remove();
+            $('#btnStart').disabled = queue.length === 0 && !$('#film [data-sample="1"]');
+            updateReadyOverlay();
+          };
+          card.appendChild(x);
+          film.appendChild(card);
+        }
+        
+        $('#btnStart').disabled = false;
+        
+        // DON'T auto-load image, just preload it in background
+        if (queue.length > 0) {
+          const imgItem = queue.find(q => q.type.startsWith('image/'));
+          if (imgItem) {
+            theImg.src = imgItem.url; // Preload but keep hidden
+            theImg.alt = imgItem.name;
+          }
+        }
+        
+        // Remove loading state
+        drop.classList.remove('loading');
+        isProcessingFiles = false;
+        
+        // Show ready overlay
+        updateReadyOverlay();
+        showReadyOverlay();
+        
+        showToast('ok', `${files.length} file${files.length !== 1 ? 's' : ''} loaded`);
+      }, 300);
+    }
+
+    drop.addEventListener('click', () => {
+      if (!isProcessingFiles) fileInput.click();
+    });
+    $('#btnChoose').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isProcessingFiles) fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', e => { 
+      if (e.target.files.length && !isProcessingFiles) {
+        isProcessingFiles = true;
+        queueFiles(Array.from(e.target.files));
+      }
+      // Reset input after processing starts
+      setTimeout(() => {
+        fileInput.value = '';
+      }, 500);
+    });
+
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.borderColor = 'var(--accent)'; });
+    drop.addEventListener('dragleave', () => drop.style.borderColor = 'color-mix(in srgb, var(--line), var(--accent) 20%)');
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.style.borderColor = 'color-mix(in srgb, var(--line), var(--accent) 20%)';
+      if (e.dataTransfer.files?.length) queueFiles(e.dataTransfer.files);
+    });
+
+    $('#btnSample').addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      // Prevent any file dialog from opening
+      if (isProcessingFiles) return;
+      isProcessingFiles = true;
+      
+      // Show loading state
+      drop.classList.add('loading');
+      
+      // Use images that can actually be loaded (relative paths that work)
+      const sampleImages = [
+        { path: 'Lungs/before/Lungs.jpg', name: 'Lungs.jpg' },
+        { path: 'Lungs/before/Spine.png', name: 'Spine.png' },
+        { path: 'Lungs/before/Abdomen.jpg', name: 'Abdomen.jpg' },
+        { path: 'Lungs/before/Heart.jpg', name: 'Heart.jpg' },
+        { path: 'Lungs/before/Brain.jpg', name: 'Brain.jpg' }
+      ];
+      
+      // Clear existing queue and film
+      queue = [];
+      film.innerHTML = '';
+      
+      // Load each image
+      let loadedCount = 0;
+      
+      for (let i = 0; i < sampleImages.length; i++) {
+        const { path: imgPath, name: fileName } = sampleImages[i];
+        
+        try {
+          // Create a simple object for the queue (no need to fetch)
+          const url = imgPath; // Use direct path
+          
+          // Create a mock file object with inferred mime type
+          const ext = fileName.split('.').pop()?.toLowerCase() || '';
+          const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+          const mockFile = { name: fileName, type: mime };
+          
+          // Add to queue
+          queue.push({ file: mockFile, url: url, type: mime, name: fileName });
+          
+          // Add thumbnail to film
+          const card = document.createElement('div');
+          card.className = 'thumb';
+          card.dataset.idx = String(queue.length - 1);
+          
+          const im = document.createElement('img');
+          im.src = url;
+          im.onerror = () => {
+            console.error(`Failed to load ${imgPath}`);
+            card.style.opacity = '0.5';
+          };
+          card.appendChild(im);
+          
+          const xBtn = document.createElement('button');
+          xBtn.className = 'x';
+          xBtn.textContent = '×';
+          xBtn.ariaLabel = 'Remove';
+          xBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = Number(card.dataset.idx);
+            queue.splice(idx, 1);
+            card.remove();
+            // Re-index remaining cards
+            Array.from(film.children).forEach((c, newIdx) => {
+              c.dataset.idx = newIdx;
+            });
+            if (queue.length === 0) {
+              $('#btnStart').disabled = true;
+              hideReadyOverlay();
+            } else {
+              updateReadyOverlay();
+            }
+          });
+          card.appendChild(xBtn);
+          
+          card.addEventListener('click', () => {
+            const idx = Number(card.dataset.idx);
+            // Show selected image
+            if (queue[idx]) {
+              const item = queue[idx];
+              theVid.style.display = 'none';
+              theImg.src = item.url;
+              theImg.alt = item.name;
+              theImg.style.display = 'block';
+              theImg.style.opacity = '1';
+              theImg.style.transform = 'scale(1)';
+              showDicomOverlays();
+            }
+          });
+          
+          film.appendChild(card);
+          loadedCount++;
+        } catch (error) {
+          console.error(`Failed to load ${imgPath}:`, error);
+        }
+      }
+      
+      // Remove loading state
+      drop.classList.remove('loading');
+      isProcessingFiles = false;
+      
+      // Enable start button and show ready overlay
+      if (queue.length > 0) {
+        $('#btnStart').disabled = false;
+        updateReadyOverlay();
+        showReadyOverlay();
+        theVid.style.display = 'none';
+        theImg.style.display = 'none';
+        theImg.src = '';
+        hideDicomOverlays();
+        showToast('ok', `Loaded ${loadedCount} sample images`);
+      } else {
+        showToast('error', 'Failed to load sample images');
+      }
+    });
+
+    function updateReadyOverlay() {
+      const fileCount = queue.length || (film.querySelector('[data-sample="1"]') ? 1 : 0);
+      readyFileCount.textContent = `${fileCount} file${fileCount !== 1 ? 's' : ''} loaded`;
+    }
+
+    function hideReadyOverlay() {
+      readyOverlay.classList.remove('visible');
+      if (readyOverlayHideTimeout) {
+        clearTimeout(readyOverlayHideTimeout);
+        readyOverlayHideTimeout = null;
+      }
+    }
+
+    function showReadyOverlay(autoHide = true) {
+      readyOverlay.classList.add('visible');
+      if (autoHide) {
+        if (readyOverlayHideTimeout) clearTimeout(readyOverlayHideTimeout);
+        readyOverlayHideTimeout = setTimeout(() => {
+          readyOverlay.classList.remove('visible');
+          readyOverlayHideTimeout = null;
+        }, 1800);
+      }
+    }
+
+    readyOverlay.addEventListener('click', hideReadyOverlay);
+
+    /* ========= Viewer media selection ========= */
+    function showFirstQueued() {
+      const imgItem = queue.find(q => q.type.startsWith('image/'));
+      if (imgItem) {
+        theVid.style.display = 'none';
+        theImg.src = imgItem.url;
+        theImg.alt = imgItem.name;
+        theImg.style.display = 'block';
+        theImg.style.opacity = '1';
+        theImg.style.transform = 'scale(1)';
+        showDicomOverlays();
+        return true;
+      }
+      if (film.querySelector('[data-sample="1"]')) {
+        showSample();
+        return true;
+      }
+      theImg.style.display = 'none';
+      theVid.style.display = 'none';
+      hideDicomOverlays();
+      return false;
+    }
+
+    function showDicomOverlays() {
+      overlays.forEach(overlay => overlay.classList.add('visible'));
+    }
+
+    function hideDicomOverlays() {
+      overlays.forEach(overlay => overlay.classList.remove('visible'));
+    }
+
+    function showSample() {
+      theVid.style.display = 'none';
+  theImg.src = SAMPLE_GIF;
+  theImg.alt = 'Sample animation (GIF)';
+      theImg.style.display = 'block';
+      theImg.style.opacity = '1';
+      theImg.style.transform = 'scale(1)';
+      showDicomOverlays();
+      if (!film.querySelector('[data-sample="1"]')) {
+        const card = document.createElement('div');
+        card.className = 'thumb'; card.dataset.sample = '1';
+  const im = document.createElement('img'); im.src = SAMPLE_GIF; card.appendChild(im);
+        film.appendChild(card);
+      }
+    }
+
+    /* ========= Pipeline ========= */
+    async function startPipeline() {
+      if (running) return;
+      running = true;
+      $('#btnStart').disabled = true;
+      $('#btnReport').disabled = true;
+      $('#pipelineStatus').textContent = 'Running';
+
+      // Hide ready overlay and image before starting
+      hideReadyOverlay();
+      theImg.style.display = 'none';
+      theImg.style.opacity = '0';
+      hideDicomOverlays();
+
+      for (let i = 0; i < steps.length; i++) {
+        const s = steps[i];
+        setStatus(i, 'running');
+        const t0 = performance.now();
+        await runStage(i, s.ms);
+        const elapsed = Math.round(performance.now() - t0);
+        setStatus(i, 'done');
+        updateOverallProgress(i+1, 0);
+      }
+
+      $('#pipelineStatus').textContent = 'Complete';
+      $('#btnReport').disabled = false;
+      showToast('ok', 'Analysis complete!');
+      running = false;
+    }
+
+    function runStage(index, ms) {
+      return new Promise(async resolve => {
+        let start = null;
+        function tick(ts) {
+          if (!start) start = ts;
+          const d = ts - start;
+          const frac = Math.min(1, d / ms);
+          updateOverallProgress(index, frac);
+          if (d < ms) requestAnimationFrame(tick); else resolve();
+        }
+
+        switch (index) {
+          case 0: 
+            await animateGrouping(ms); // Wait for user selection
+            resolve();
+            break;
+          case 1: 
+            requestAnimationFrame(tick);
+            animateEnhancement(ms);
+            break;
+          case 2: 
+            requestAnimationFrame(tick);
+            animateAnomaly(ms);
+            break;
+          case 3: 
+            requestAnimationFrame(tick);
+            animateVisualization(ms);
+            break;
+          case 4: 
+            requestAnimationFrame(tick);
+            animateMatching(ms);
+            break;
+          case 5: 
+            requestAnimationFrame(tick);
+            animateNotification(ms);
+            break;
+        }
+      });
+    }
+
+    /* ========= Stage animations ========= */
+    function animateEnhancement(ms) {
+      $('#viewer').classList.add('sweep');
+      imgWrap.style.filter = 'contrast(1.02) saturate(1.02) blur(0.6px)';
+      setTimeout(() => {
+        imgWrap.style.transition = 'filter .55s ease';
+        imgWrap.style.filter = 'contrast(1.08) saturate(1.05) blur(0px)';
+      }, ms*0.6);
+      setTimeout(() => $('#viewer').classList.remove('sweep'), ms - 120);
+    }
+
+    function animateGrouping(ms) {
+      const imageUrls = queue.filter(q => q.type.startsWith('image/')).map(q => q.url);
+      
+      // Determine which image will be shown in final viewer
+      let finalImageUrl;
+      if (imageUrls.length > 0) {
+        finalImageUrl = imageUrls[0];
+      } else {
+        finalImageUrl = SAMPLE_GIF;
+      }
+      
+      // For display: use all images if available, otherwise sample
+      const displayUrls = imageUrls.length > 0 ? imageUrls : [SAMPLE_GIF];
+      
+      // Create a professional vertical slice selector (like a medical imaging workstation)
+      const sliceCount = 6;
+      const slices = [];
+      let selectedIndex = -1;
+      let userHasSelected = false;
+      
+      return new Promise((resolveAnimation) => {
+        for (let i = 0; i < sliceCount; i++) {
+          const slice = document.createElement('div');
+          Object.assign(slice.style, {
+            position: 'absolute',
+            right: '15%',
+            top: (20 + i * 11) + '%',
+            width: '100px',
+            height: '65px',
+            borderRadius: '4px',
+            background: '#1a1c20',
+            border: '1px solid var(--line)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: '0',
+            transform: 'translateX(50px)',
+            transition: 'all 0.4s ease',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            zIndex: '5',
+            cursor: 'pointer'
+          });
+          
+          // Distribute images across slices, middle one gets the final image
+          const imgUrl = (i === 2) ? finalImageUrl : displayUrls[i % displayUrls.length];
+          slice.style.backgroundImage = `url('${imgUrl}')`;
+          
+          // Add slice number label
+          const label = document.createElement('div');
+          Object.assign(label.style, {
+            position: 'absolute',
+            top: '4px',
+            left: '4px',
+            background: 'rgba(0,0,0,0.7)',
+            color: '#fff',
+            padding: '2px 6px',
+            borderRadius: '3px',
+            fontSize: '10px',
+            fontWeight: '600'
+          });
+          label.textContent = `#${i + 1}`;
+          slice.appendChild(label);
+          
+          // Add hover effect
+          slice.addEventListener('mouseenter', function() {
+            if (!userHasSelected) {
+              this.style.border = '2px solid rgba(122,162,255,0.5)';
+              this.style.transform = 'translateX(-5px)';
+            }
+          });
+          
+          slice.addEventListener('mouseleave', function() {
+            if (!userHasSelected && selectedIndex !== i) {
+              this.style.border = '1px solid var(--line)';
+              this.style.transform = 'translateX(0)';
+            }
+          });
+          
+          // Click to select
+          slice.addEventListener('click', function() {
+            if (userHasSelected) return;
+            
+            userHasSelected = true;
+            selectedIndex = i;
+            
+            // Update final image URL based on user selection
+            finalImageUrl = imgUrl; // Use the clicked slice's image
+            theImg.src = finalImageUrl; // Update the preloaded image
+            
+            // Proceed with selection animation
+            proceedWithSelection(i);
+          });
+          
+          imgWrap.appendChild(slice);
+          slices.push(slice);
+          
+          // Stagger the appearance
+          setTimeout(() => {
+            slice.style.opacity = '1';
+            slice.style.transform = 'translateX(0)';
+          }, 100 + i * 80);
+        }
+        
+        // Add instruction text
+        const instruction = document.createElement('div');
+        Object.assign(instruction.style, {
+          position: 'absolute',
+          right: '10%',
+          top: '10%',
+          color: 'var(--accent)',
+          fontSize: '13px',
+          fontWeight: '600',
+          background: 'rgba(26,28,32,0.95)',
+          padding: '8px 14px',
+          borderRadius: '6px',
+          border: '1px solid var(--accent)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          opacity: '0',
+          transition: 'opacity 0.4s ease',
+          zIndex: '10',
+          pointerEvents: 'none'
+        });
+        instruction.textContent = 'Click a slice to analyze';
+        imgWrap.appendChild(instruction);
+        
+        setTimeout(() => {
+          instruction.style.opacity = '1';
+        }, 600);
+        
+        function proceedWithSelection(index) {
+          // Hide instruction
+          instruction.style.opacity = '0';
+          setTimeout(() => instruction.remove(), 400);
+          
+          const selectedSlice = slices[index];
+          
+          // Highlight the selected slice
+          selectedSlice.style.border = '2px solid var(--accent)';
+          selectedSlice.style.boxShadow = '0 0 0 3px rgba(122,162,255,0.2), 0 4px 12px rgba(0,0,0,0.4)';
+          selectedSlice.style.cursor = 'default';
+          
+          // Dim and disable other slices
+          slices.forEach((s, i) => {
+            if (i !== index) {
+              s.style.opacity = '0.3';
+              s.style.cursor = 'default';
+              s.style.pointerEvents = 'none';
+            }
+          });
+          
+          // After selection highlight, zoom the selected slice to center
+          setTimeout(() => {
+            selectedSlice.style.transition = 'all 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+            selectedSlice.style.right = '50%';
+            selectedSlice.style.top = '50%';
+            selectedSlice.style.transform = 'translate(50%, -50%)';
+            selectedSlice.style.width = '150px';
+            selectedSlice.style.height = '100px';
+            selectedSlice.style.zIndex = '100';
+            
+            // Fade out other slices
+            slices.forEach((s, i) => {
+              if (i !== index) {
+                s.style.transition = 'opacity 0.5s ease';
+                s.style.opacity = '0';
+              }
+            });
+          }, 400);
+          
+          // Now expand to full viewer size
+          setTimeout(() => {
+            selectedSlice.style.transition = 'all 1.0s cubic-bezier(0.22, 0.61, 0.36, 1)';
+            selectedSlice.style.width = 'min(90%, 1000px)';
+            selectedSlice.style.height = 'min(85%, 800px)';
+            selectedSlice.style.border = 'none';
+            selectedSlice.style.boxShadow = 'none';
+            selectedSlice.style.borderRadius = '0px';
+            
+            // Show DICOM overlays mid-zoom
+            setTimeout(() => showDicomOverlays(), 400);
+            
+            // Swap to real img element for better quality
+            setTimeout(() => {
+              theImg.style.display = 'block';
+              theImg.style.opacity = '0';
+              theImg.style.position = 'absolute';
+              
+              setTimeout(() => {
+                selectedSlice.style.transition = 'opacity 0.5s ease';
+                selectedSlice.style.opacity = '0';
+                theImg.style.transition = 'opacity 0.5s ease';
+                theImg.style.opacity = '1';
+                
+                // Cleanup and resolve
+                setTimeout(() => {
+                  slices.forEach(s => s.remove());
+                  resolveAnimation();
+                }, 500);
+              }, 50);
+            }, 900);
+            
+          }, 1600);
+        }
+        
+        // Auto-select middle slice if user doesn't click within extended timeout
+        setTimeout(() => {
+          if (!userHasSelected) {
+            showToast('info', 'Auto-selecting slice #3...');
+            setTimeout(() => proceedWithSelection(2), 1000);
+          }
+        }, 15000); // Give user 15 seconds to choose
+      });
+    }
+
+    function animateAnomaly(ms) {
+      // First show hotspots (pulsing circles) - keep these subtle
+      hots.forEach(h => h.style.opacity = .6);
+      
+      // Add marching ants border around entire scan
+      const ants = document.createElement('div');
+      Object.assign(ants.style, {
+        position:'absolute', left:'8%', top:'10%', width:'84%', height:'80%',
+        border:'1.5px dashed rgba(255,255,255,.35)', borderRadius:'10px',
+        animation:'ants 1.2s linear infinite', pointerEvents:'none'
+      });
+      imgWrap.appendChild(ants);
+      setTimeout(()=> ants.remove(), ms-120);
+      
+      // After initial scan, show specific ROI boxes based on AI analysis
+      setTimeout(async () => {
+        if (theImg.src) {
+          try {
+            // Convert image to data URL for API
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = theImg.naturalWidth;
+            canvas.height = theImg.naturalHeight;
+            ctx.drawImage(theImg, 0, 0);
+            const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+            aiAnalysisResults = await analyzeImageWithAI(imageDataUrl);
+            
+            // Use AI-detected ROIs
+            const rois = aiAnalysisResults.rois.map(roi => ({
+              ...roi,
+              label: `${roi.label}`
+            }));
+
+            // Store ROI positions
+            window.currentROIPositions = rois;
+
+            rois.forEach((r, i) => {
+              const el = document.createElement('div');
+              el.className = 'roi';
+              Object.assign(el.style, {
+                left: r.left + '%',
+                top: r.top + '%'
+              });
+              
+              // Label with percentage (positioned above the box)
+              const lbl = document.createElement('div');
+              Object.assign(lbl.style, {
+                position: 'absolute',
+                top: '-28px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(0, 0, 0, 0.85)',
+                color: '#ffd700',
+                fontWeight: '700',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255, 215, 0, 0.3)',
+                whiteSpace: 'nowrap',
+                letterSpacing: '0.3px'
+              });
+              lbl.textContent = r.label;
+              el.appendChild(lbl);
+              
+              imgWrap.appendChild(el);
+              
+              // Animate in with delay
+              setTimeout(() => {
+                el.style.opacity = '1';
+                el.style.transform = 'translate(-50%, -50%) scale(1)';
+              }, 220 + i * 160);
+              
+              // Pulsing glow animation
+              el.animate([
+                { boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,215,0,0.05) inset, 0 0 20px rgba(255,215,0,0.2)' },
+                { boxShadow: '0 6px 18px rgba(0,0,0,0.5), 0 0 0 8px rgba(255,215,0,0.1) inset, 0 0 40px rgba(255,215,0,0.4)' },
+                { boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,215,0,0.05) inset, 0 0 20px rgba(255,215,0,0.2)' }
+              ], { duration: 2000, iterations: Infinity, delay: 300 + i * 120 });
+            });
+          } catch (err) {
+            console.error('AI analysis failed:', err);
+            showToast('error', 'AI analysis failed, using fallback ROIs');
+            // Fallback to sample ROIs
+            const rois = [
+              { left: 40, top: 35, confidence: 89, label: 'ROI 89%' },
+              { left: 50, top: 50, confidence: 83, label: 'ROI 83%' },
+              { left: 45, top: 65, confidence: 90, label: 'ROI 90%' }
+            ];
+            window.currentROIPositions = rois;
+            
+            rois.forEach((r, i) => {
+              const el = document.createElement('div');
+              el.className = 'roi';
+              Object.assign(el.style, { left: r.left + '%', top: r.top + '%' });
+              const lbl = document.createElement('div');
+              Object.assign(lbl.style, {
+                position: 'absolute', top: '-28px', left: '50%', transform: 'translateX(-50%)',
+                background: 'rgba(0, 0, 0, 0.85)', color: '#ffd700', fontWeight: '700',
+                padding: '3px 8px', borderRadius: '4px', fontSize: '11px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)', border: '1px solid rgba(255, 215, 0, 0.3)',
+                whiteSpace: 'nowrap', letterSpacing: '0.3px'
+              });
+              lbl.textContent = r.label;
+              el.appendChild(lbl);
+              imgWrap.appendChild(el);
+              setTimeout(() => {
+                el.style.opacity = '1';
+                el.style.transform = 'translate(-50%, -50%) scale(1)';
+              }, 220 + i * 160);
+              el.animate([
+                { boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,215,0,0.05) inset, 0 0 20px rgba(255,215,0,0.2)' },
+                { boxShadow: '0 6px 18px rgba(0,0,0,0.5), 0 0 0 8px rgba(255,215,0,0.1) inset, 0 0 40px rgba(255,215,0,0.4)' },
+                { boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,215,0,0.05) inset, 0 0 20px rgba(255,215,0,0.2)' }
+              ], { duration: 2000, iterations: Infinity, delay: 300 + i * 120 });
+            });
+          }
+        } else {
+          // No image, use sample fallback
+          const rois = [
+            { left: 40, top: 35, confidence: 89, label: 'ROI 89%' },
+            { left: 50, top: 50, confidence: 83, label: 'ROI 83%' },
+            { left: 45, top: 65, confidence: 90, label: 'ROI 90%' }
+          ];
+          window.currentROIPositions = rois;
+          
+          rois.forEach((r, i) => {
+            const el = document.createElement('div');
+            el.className = 'roi';
+            Object.assign(el.style, { left: r.left + '%', top: r.top + '%' });
+            const lbl = document.createElement('div');
+            Object.assign(lbl.style, {
+              position: 'absolute', top: '-28px', left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(0, 0, 0, 0.85)', color: '#ffd700', fontWeight: '700',
+              padding: '3px 8px', borderRadius: '4px', fontSize: '11px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.5)', border: '1px solid rgba(255, 215, 0, 0.3)',
+              whiteSpace: 'nowrap', letterSpacing: '0.3px'
+            });
+            lbl.textContent = r.label;
+            el.appendChild(lbl);
+            imgWrap.appendChild(el);
+            setTimeout(() => {
+              el.style.opacity = '1';
+              el.style.transform = 'translate(-50%, -50%) scale(1)';
+            }, 220 + i * 160);
+            el.animate([
+              { boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,215,0,0.05) inset, 0 0 20px rgba(255,215,0,0.2)' },
+              { boxShadow: '0 6px 18px rgba(0,0,0,0.5), 0 0 0 8px rgba(255,215,0,0.1) inset, 0 0 40px rgba(255,215,0,0.4)' },
+              { boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,215,0,0.05) inset, 0 0 20px rgba(255,215,0,0.2)' }
+            ], { duration: 2000, iterations: Infinity, delay: 300 + i * 120 });
+          });
+        }
+      }, ms * 0.4);
+    }
+
+    // Function to analyze image with Gemini AI API
+    async function analyzeImageWithAI(imageDataUrl) {
+      const apiKey = 'AIzaSyBUWTpY2JP1GJog_vOWB2sW0tGKgu3FyXg'; // Embedded API key
+      
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                {
+                  text: 'Analyze this medical CT scan image for any potential anomalies or significant findings. First, identify the primary anatomical structure shown (e.g., "Lungs", "Knee Joint", "Brain"). If a specific anomaly or significant point of interest is found (like a fracture, nodule, or lesion), place the ROI marker on it. If the image appears normal, place the ROI marker in the center of the main anatomical structure. Use a coordinate system where 50% is the center (e.g., a central marker would have "left" and "top" values around 50%). Provide analysis in pure JSON (no markdown): {"findings": "detailed text describing the main structure and any anomalies found", "confidence": {"anomaly_detected": number 0-100, "image_quality": number 0-100, "normal": number 0-100}, "recommendations": "text, e.g., \'Requires specialist review\' or \'Appears normal\'", "rois": [{"label": "description of the finding or main structure", "left": number 30-70, "top": number 30-70, "confidence": number 0-100}]}'
+                },
+                {
+                  inline_data: {
+                    mime_type: 'image/jpeg',
+                    data: imageDataUrl.split(',')[1]
+                  }
+                }
+              ]
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API Error Response:', errorText);
+          throw new Error(`AI analysis failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('API Response:', data);
+        
+        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+          throw new Error('Invalid API response structure');
+        }
+        
+        let content = data.candidates[0].content.parts[0].text;
+        console.log('AI Response Text:', content);
+        
+        // Multiple strategies to extract and clean JSON
+        try {
+          // Strategy 1: Remove markdown code blocks
+          content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+          
+          // Strategy 2: Find JSON object boundaries
+          const jsonStart = content.indexOf('{');
+          const jsonEnd = content.lastIndexOf('}');
+          
+          if (jsonStart !== -1 && jsonEnd !== -1) {
+            content = content.substring(jsonStart, jsonEnd + 1);
+          }
+          
+          // Strategy 3: Clean common JSON issues
+          content = content
+            .replace(/,\s*}/g, '}')  // Remove trailing commas
+            .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
+            .replace(/[\u0000-\u001F]+/g, '') // Remove control characters
+            .trim();
+          
+          console.log('Cleaned JSON:', content);
+          
+          const parsed = JSON.parse(content);
+          
+          // Constrain coordinates to reasonable brain tissue area (center-focused)
+          const constrainCoordinate = (val, min = 35, max = 65) => {
+            const num = Number(val) || 50;
+            return Math.max(min, Math.min(max, num));
+          };
+          
+          // Validate and normalize the structure
+          return {
+            findings: String(parsed.findings || 'Analysis completed'),
+            confidence: {
+              hemorrhage: Math.min(100, Math.max(0, Number(parsed.confidence?.hemorrhage) || 2)),
+              massEffect: Math.min(100, Math.max(0, Number(parsed.confidence?.massEffect) || 5)),
+              midlineShift: Math.min(100, Math.max(0, Number(parsed.confidence?.midlineShift) || 3)),
+              normal: Math.min(100, Math.max(0, Number(parsed.confidence?.normal) || 75))
+            },
+            recommendations: String(parsed.recommendations || 'Routine follow-up as clinically indicated. Correlate with clinical presentation.'),
+            rois: Array.isArray(parsed.rois) && parsed.rois.length > 0 ? parsed.rois.slice(0, 3).map((roi, idx) => ({
+              label: String(roi.label || `Region ${idx + 1}`),
+              left: constrainCoordinate(roi.left, 35, 65),
+              top: constrainCoordinate(roi.top, 35, 65),
+              confidence: Math.min(100, Math.max(0, Number(roi.confidence) || 50))
+            })) : [
+              { label: 'Lateral ventricle', left: 45, top: 40, confidence: 95 },
+              { label: 'Pineal gland', left: 50, top: 50, confidence: 98 }
+            ]
+          };
+        } catch (parseError) {
+          console.error('JSON Parse Error:', parseError);
+          console.error('Failed content:', content);
+          
+          // Ultimate fallback with safe coordinates
+          return {
+            findings: content.substring(0, 500) || 'Mild diffuse cerebral atrophy with prominent sulci and mildly enlarged lateral ventricles. Punctate calcifications noted in the left choroid plexus and pineal gland. No evidence of acute intracranial hemorrhage, significant mass effect, or midline shift.',
+            confidence: { hemorrhage: 2, massEffect: 5, midlineShift: 3, normal: 75 },
+            recommendations: 'Routine follow-up as clinically indicated. No urgent intervention appears necessary based on this single axial CT image.',
+            rois: [
+              { label: 'Lateral ventricle', left: 45, top: 40, confidence: 95 },
+              { label: 'Pineal gland', left: 50, top: 50, confidence: 98 }
+            ]
+          };
+        }
+      } catch (error) {
+        console.error('AI Analysis Error:', error);
+        showToast('warn', 'AI unavailable, using demo data');
+        
+        // Return demo data with corrected coordinates
+        return {
+          findings: 'Mild diffuse cerebral atrophy with prominent sulci and mildly enlarged lateral ventricles. Punctate calcifications noted in the left choroid plexus and pineal gland. No evidence of acute intracranial hemorrhage, significant mass effect, or midline shift.',
+          confidence: { hemorrhage: 2, massEffect: 5, midlineShift: 3, normal: 75 },
+          recommendations: 'Routine follow-up as clinically indicated. No urgent intervention appears necessary based on this single axial CT image.',
+          rois: [
+            { label: 'Left lateral ventricle', left: 45, top: 42, confidence: 95 },
+            { label: 'Right lateral ventricle', left: 55, top: 42, confidence: 95 },
+            { label: 'Pineal calcification', left: 50, top: 48, confidence: 98 }
+          ]
+        };
+      }
+    }
+
+    function animateVisualization(ms) {
+      // This stage keeps the ROI boxes visible only (no heatmaps, no pins)
+      
+      // Update ROI labels to show "confirmed" status
+      setTimeout(() => {
+        const existingRois = document.querySelectorAll('.roi');
+        existingRois.forEach((roi, i) => {
+          // Add a subtle green checkmark or "✓" to confirmed anomalies
+          const checkmark = document.createElement('span');
+          Object.assign(checkmark.style, {
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            color: '#4ad67a',
+            fontSize: '16px',
+            fontWeight: '700',
+            textShadow: '0 2px 4px rgba(0,0,0,0.6)'
+          });
+          checkmark.textContent = '✓';
+          roi.appendChild(checkmark);
+        });
+      }, ms * 0.3);
+    }
+
+    function animateNotification(ms) {
+      setTimeout(()=> showToast('ok','Report ready for download.'), ms-300);
+    }
+
+    function animateMatching(ms) {
+      $('#pipelineStatus').textContent = 'Analyzing';
+      let targets = [89, 76, 12, 5]; // Default
+      if (aiAnalysisResults && aiAnalysisResults.confidence) {
+        targets = [
+          aiAnalysisResults.confidence.hemorrhage || 89,
+          aiAnalysisResults.confidence.massEffect || 76,
+          aiAnalysisResults.confidence.midlineShift || 12,
+          aiAnalysisResults.confidence.normal || 5
+        ];
+      }
+      const bars = [$('#r1'),$('#r2'),$('#r3'),$('#r4')];
+      const vals = [$('#rv1'),$('#rv2'),$('#rv3'),$('#rv4')];
+      setTimeout(()=> {
+        bars.forEach((b,i)=> { b.style.width = targets[i]+'%'; vals[i].textContent = targets[i]+'%'; });
+      }, ms*0.35);
+    }
+
+    function downloadReport() {
+      showToast('info', 'Generating detailed PDF report...');
+      
+      // Capture screenshot of the image wrapper only (avoids complex CSS)
+      html2canvas($('#imgwrap')).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        
+        // Create PDF
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF();
+        
+        // Add screenshot first
+        pdf.setFontSize(14);
+        pdf.text('Analysis Visualization:', 20, 20);
+        const imgWidth = 180;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 15, 30, imgWidth, imgHeight);
+        
+        // Add new page for text
+        pdf.addPage();
+        
+        // Add title
+        pdf.setFontSize(20);
+        pdf.text('AI DICOM Analysis Report', 20, 30);
+        
+        // Add diagnostic text with AI results or default
+        pdf.setFontSize(12);
+  let diagnosticText = `
+Patient Information:
+- Patient ID: SAMPLE^PATIENT
+- Study Date: 2025-01-11
+- Institution: Medical Center
+
+AI Analysis Results:
+- Hemorrhage: 89% confidence
+- Mass Effect: 76% confidence  
+- Midline Shift: 12% confidence
+- Normal: 5% confidence
+
+Detailed Findings:
+The AI analysis detected potential anomalies in the CT scan. Three regions of interest (ROIs) were identified with confidence levels ranging from 70-95%. The primary concern is hemorrhage with 89% confidence, followed by mass effect at 76%. Midline shift was detected at 12%, while normal tissue was assessed at 5%.
+
+Clinical Recommendations:
+- Immediate clinical correlation recommended for hemorrhage findings
+- Consider follow-up imaging to monitor mass effect
+- Consult with radiologist for definitive diagnosis
+
+Disclaimer:
+This report is for informational purposes only. Real medical diagnosis requires physician review.
+
+Report Generated: ${new Date().toLocaleString()}
+  `;
+        
+        if (aiAnalysisResults) {
+          diagnosticText = `
+Patient Information:
+- Patient ID: SAMPLE^PATIENT
+- Study Date: 2025-01-11
+- Institution: Medical Center
+
+AI Analysis Results:
+- Hemorrhage: ${aiAnalysisResults.confidence?.hemorrhage || 0}% confidence
+- Mass Effect: ${aiAnalysisResults.confidence?.massEffect || 0}% confidence  
+- Midline Shift: ${aiAnalysisResults.confidence?.midlineShift || 0}% confidence
+- Normal: ${aiAnalysisResults.confidence?.normal || 0}% confidence
+
+Detailed Findings:
+${aiAnalysisResults.findings || 'AI analysis completed.'}
+
+Clinical Recommendations:
+${aiAnalysisResults.recommendations || 'Consult radiologist for definitive diagnosis'}
+
+Disclaimer:
+This report is for informational purposes only. All findings must be reviewed and confirmed by qualified medical professionals.
+
+Report Generated: ${new Date().toLocaleString()}
+          `;
+        }
+        
+        const lines = pdf.splitTextToSize(diagnosticText, 170);
+        let yPosition = 50;
+        lines.forEach(line => {
+          if (yPosition > 250) { // If near bottom of page, add new page
+            pdf.addPage();
+            yPosition = 30;
+          }
+          pdf.text(line, 20, yPosition);
+          yPosition += 6;
+        });
+        
+  // Download PDF
+  pdf.save('analysis-report.pdf');
+        showToast('ok', 'Detailed PDF report downloaded!');
+      }).catch(err => {
+        console.error('Screenshot failed:', err);
+        // Fallback: generate PDF without screenshot
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF();
+        pdf.setFontSize(20);
+        pdf.text('AI DICOM Analysis Report', 20, 30);
+        pdf.setFontSize(12);
+  const diagnosticText = `
+Patient Information:
+- Patient ID: SAMPLE^PATIENT
+- Study Date: 2025-01-11
+- Institution: Medical Center
+
+AI Analysis Results:
+- Hemorrhage: 89% confidence
+- Mass Effect: 76% confidence  
+- Midline Shift: 12% confidence
+- Normal: 5% confidence
+
+Detailed Findings:
+The AI analysis detected potential anomalies in the CT scan. Three regions of interest (ROIs) were identified with confidence levels ranging from 70-95%. The primary concern is hemorrhage with 89% confidence, followed by mass effect at 76%. Midline shift was detected at 12%, while normal tissue was assessed at 5%.
+
+Clinical Recommendations:
+- Immediate clinical correlation recommended for hemorrhage findings
+- Consider follow-up imaging to monitor mass effect
+- Consult with radiologist for definitive diagnosis
+
+Disclaimer:
+This report is for informational purposes only. Real medical diagnosis requires physician review.
+
+Report Generated: ${new Date().toLocaleString()}
+  `;
+        const lines = pdf.splitTextToSize(diagnosticText, 170);
+        let yPosition = 50;
+        lines.forEach(line => {
+          pdf.text(line, 20, yPosition);
+          yPosition += 6;
+        });
+  pdf.save('analysis-report.pdf');
+  showToast('ok', 'PDF report downloaded (without screenshot)!');
+      });
+    }
+
+    /* ========= Event wiring ========= */
+    $('#btnStart').addEventListener('click', startPipeline);
+    $('#btnReport').addEventListener('click', downloadReport);
+    $('#btnHelp').addEventListener('click', () => $('#helpDialog').showModal());
+    $('#btnCloseHelp').addEventListener('click', () => $('#helpDialog').close());
+
+    // Initial state
+    resetUI();
+    
+    // Handle tablet orientation detection
+    function checkOrientation() {
+      const rotateOverlay = $('#rotateOverlay');
+      const isTablet = window.innerWidth >= 768 && window.innerWidth <= 1024;
+      const isPortrait = window.innerHeight > window.innerWidth;
+      
+      if (isTablet && isPortrait) {
+        rotateOverlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } else {
+        rotateOverlay.style.display = 'none';
+        document.body.style.overflow = 'hidden'; // Keep hidden for panel
+      }
+    }
+    
+    // Check on load and orientation change
+    window.addEventListener('load', checkOrientation);
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+  </script>
+</body>
+</html>

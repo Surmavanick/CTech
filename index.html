@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>CTech - AI-Powered CT Scan Analysis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Changed fonts: Roboto Slab for headings, Noto Sans for body -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=Noto+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <nav class="nav">
+                <div class="nav-brand">
+                    <a href="#" class="logo"><img src="Images/CTech logo-01.svg" alt="CTech Logo"></a>
+                </div>
+                <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle menu">
+                    <span class="hamburger"></span>
+                </button>
+                <ul class="nav-menu" id="navMenu">
+                    <li><a href="#hero">Home</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#process">How It Works</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                    <li><a href="Panel.html" class="nav-button">Try CTech AI</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Rotate Device Overlay for Tablets in Portrait Mode -->
+    <div class="rotate-overlay" id="rotateOverlay">
+        <div class="rotate-content">
+                        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rotate-icon">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+                <path d="M12 7v4l3-3m-6 0l3 3" stroke-width="1.5"></path>
+            </svg>
+            <h2>Rotate Your Device</h2>
+            <p>Please rotate your tablet to landscape orientation for the best experience</p>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero">
+        <div class="container">
+            <div class="hero-grid">
+                <div class="hero-content">
+                    <h1 class="hero-title">CTech</h1>
+                    <p class="hero-description">
+                        AI at Meta and NYU Langone Health demonstrate that AI can generate accurate CT scans using one-fourth of the raw data traditionally required for a full CT scan.
+                    </p>
+                </div>
+                <div class="hero-image">
+                    <div class="image-wrapper">
+                        <img src="Images/cardiac-mri.gif" alt="CT Scan" class="mri-image">
+                        <div class="image-overlay">
+                            <h2 class="overlay-text">Accelerate<br>CT scans<br>with AI</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section (replaced with Before/After demo) -->
+    <section id="about" class="about">
+	<div class="container">
+		<div class="section-header">
+			<h2 class="section-title">Experience Unprecedented Image Clarity with <span style="color: #FFD700;">CTech</span></h2>
+			<p class="section-description-small">
+				Our AI is trained on millions of noise‑corrupted CT images, enabling the model to precisely learn and isolate noise signatures in CT scans. It distinguishes thousands of noise patterns found in low‑dose and ultra‑low‑dose CT data and instantly produces high‑quality, low‑noise images. Anatomical detail is preserved while strong noise is removed—without distortion or a plastic appearance.
+			</p>
+		</div>
+
+		<div class="ba-section">
+			<div class="ba-left">
+				<!-- Use the comparison slider structure/IDs from the working example -->
+				<div id="comparison-container" class="comparison-slider ba-frame">
+					<!-- After (bottom) -->
+					<img id="after-image" src="Images/after/Lungs.jpg" alt="After" class="ba-img ba-after">
+
+					<!-- Before wrapper (top) - use semantic classes instead of Tailwind classes -->
+					<div id="before-wrapper" class="ba-before-wrapper">
+						<img id="before-image" src="Images/before/Lungs.jpg" alt="Before" class="ba-before-img" draggable="false">
+					</div>
+
+					<!-- Draggable handle -->
+					<div id="slider-handle-wrapper" class="slider-handle-wrapper" style="left:50%;">
+						<div class="slider-handle-line"></div>
+						<div class="slider-handle" aria-hidden="true">
+							<svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+								 xmlns="http://www.w3.org/2000/svg">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+									  d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path>
+							</svg>
+						</div>
+					</div>
+				</div>
+
+				<div class="ba-caption" id="caption-text">120 kV / 30 mAs / 1mm</div>
+
+			</div>
+
+			<div class="ba-right">
+				<div class="parts-title">Body Parts</div>
+				<div class="parts-list parts-list-expanded">
+					<button class="part active" data-part="0">
+						<img src="Images/lungs.png" alt="Lungs" class="part-icon part-icon-img">
+						<span>Lungs</span>
+					</button>
+					<button class="part" data-part="1">
+						<img src="Images/spine.png" alt="Spine" class="part-icon part-icon-img">
+						<span>Spine</span>
+					</button>
+					<button class="part" data-part="2">
+						<img src="Images/abdomen.png" alt="Abdomen" class="part-icon part-icon-img">
+						<span>Abdomen</span>
+					</button>
+					<button class="part" data-part="3">
+						<img src="Images/heart.png" alt="Heart" class="part-icon part-icon-img">
+						<span>Heart</span>
+					</button>
+					<button class="part" data-part="4">
+						<img src="Images/lungs.png" alt="Lungs (Ultra-Low)" class="part-icon part-icon-img">
+						<span>Lungs (Ultra-Low)</span>
+					</button>
+					<button class="part" data-part="5">
+						<img src="Images/brain.png" alt="Brain" class="part-icon part-icon-img">
+						<span>Brain / Head</span>
+					</button>
+				</div>
+				
+				<div class="part-description" id="part-description">
+					<p>Select a body part to see detailed information about CTech's AI-powered enhancement for that specific scan type.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+    <!-- Process Section -->
+    <section id="process" class="process">
+        <div class="container">
+            <!-- Centered Try button (styles moved to styles.css) -->
+            <div class="try-ctech-wrap">
+                <a href="Panel.html" id="tryCtech" class="try-ctech">
+                    <!-- small sparkle icon -->
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 2l1.9 4.2L18 8l-4 1.5L12 14 10 9.5 6 8l4.1-1.8L12 2z" fill="rgba(255,255,255,0.95)"/>
+                    </svg>
+                    Try - CTech Ai
+                </a>
+            </div>
+            <h2 id="process" class="section-title center">How Our AI Works</h2>
+            
+            <!-- Stage 1 -->
+            <div class="stage">
+                <div class="stage-header">
+                    <span class="stage-number">01</span>
+                    <h3 class="stage-title">Discovery Phase - Problem Detection</h3>
+                </div>
+                <div class="steps-grid">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <h4 class="step-title">Image Enhancement</h4>
+                        <p class="step-description">Photos are upscaled and layers are identified in all images</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <h4 class="step-title">Layer Grouping</h4>
+                        <p class="step-description">Similar layers are grouped together and then separated individually</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <h4 class="step-title">Anomaly Detection</h4>
+                        <p class="step-description">Inaccuracies are identified within these separated layers</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">4</div>
+                        <h4 class="step-title">Visualization</h4>
+                        <p class="step-description">The system shows doctors exactly where anomalies were detected</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 2 -->
+            <div class="stage">
+                <div class="stage-header">
+                    <span class="stage-number">02</span>
+                    <h3 class="stage-title">Diagnosis Phase - Specific Problem Identification</h3>
+                </div>
+                <div class="steps-grid two-cols">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <h4 class="step-title">Database Matching</h4>
+                        <p class="step-description">These anomalies are compared against other inaccuracies in the database, and based on photo models, provides answers about what it might be</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <h4 class="step-title">Doctor Notification</h4>
+                        <p class="step-description">Delivers comprehensive analysis and recommendations to the physician</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title center">Key Benefits</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">4x Faster Scans</h3>
+                    <p class="feature-description">Reduce CT scan time by 75% using only one-fourth of traditional raw data</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Enhanced Accuracy</h3>
+                    <p class="feature-description">AI-powered anomaly detection provides precise identification of potential issues</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Intelligent Analysis</h3>
+                    <p class="feature-description">Layer-by-layer analysis with automated grouping and separation</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <div class="container">
+            <div class="cta-content">
+                <h2 class="cta-title">Ready to Transform CT Scan Analysis?</h2>
+                <p class="cta-description">Join leading healthcare institutions using CTech technology</p>
+                <a href="Panel.html" class="cta-button" id="ctaGetStarted">Get Started</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-column">
+                    <h4 class="footer-title">CTech</h4>
+                    <p class="footer-description">Revolutionizing medical imaging with AI technology</p>
+                </div>
+                <div class="footer-column">
+                    <h4 class="footer-heading">Product</h4>
+                    <ul class="footer-links">
+                        <li><a href="#">Features</a></li>
+                        <li><a href="#">Technology</a></li>
+                        <li><a href="#">Pricing</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4 class="footer-heading">Company</h4>
+                    <ul class="footer-links">
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Research</a></li>
+                        <li><a href="#">Careers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4 class="footer-heading">Contact</h4>
+                    <ul class="footer-links">
+                        <li><a href="#">Support</a></li>
+                        <li><a href="#">Contact Us</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 CTech. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script>
+        // Handle tablet orientation detection
+        function checkOrientation() {
+            const rotateOverlay = document.getElementById('rotateOverlay');
+            const isTablet = window.innerWidth >= 768 && window.innerWidth <= 1024;
+            const isPortrait = window.innerHeight > window.innerWidth;
+            
+            if (isTablet && isPortrait) {
+                rotateOverlay.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+            } else {
+                rotateOverlay.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        }
+        
+        // Check on load and orientation change
+        window.addEventListener('load', checkOrientation);
+        window.addEventListener('resize', checkOrientation);
+        window.addEventListener('orientationchange', checkOrientation);
+    </script>
+</body>
+</html>
